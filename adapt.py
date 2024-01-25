@@ -8,8 +8,9 @@ import torch.optim as optim
 import torch.nn as nn
 from tqdm import tqdm
 from torchvision.datasets import CIFAR100
+import logging
 
-import configuration
+import configuration, tent
 from utils import prepare_dataset, utils
 
 
@@ -19,13 +20,13 @@ def setup_tent(model):
     collect the parameters for feature modulation by gradient optimization,
     set up the optimizer, and then tent the model.
     """
-    model = tent.configure_model(model)
-    extractor = [model.net.conv1, model.net.bn1, nn.ReLU(inplace=True), model.net.layer1, model.net.layer2]
-    extractor = nn.Sequential(*extractor)
-    params, param_names = tent.collect_params(extractor)
+    model.visual = tent.configure_model(model.visual)
+    #extractor = [model.net.conv1, model.net.bn1, nn.ReLU(inplace=True), model.net.layer1, model.net.layer2]
+    #extractor = nn.Sequential(*extractor)
+    params, param_names = tent.collect_params(model)
     optimizer = setup_optimizer(params)
     tent_model = tent.Tent(model, optimizer,
-                           steps=20, ### Iterations
+                           steps=10, ### Iterations
                            episodic=True)
     return tent_model
 
@@ -47,10 +48,12 @@ def setup_optimizer(params):
 
 # Argues
 args = configuration.argparser()
+logger = logging.getLogger(__name__)
 
 # Load the model
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model, preprocess = clip.load('ViT-B/32', device)
+base_model, preprocess = clip.load('ViT-B/32', device)
+model = setup_tent(base_model)
 
 # Download the dataset
 teloader, _, teset = prepare_dataset.prepare_test_data(args)
@@ -62,11 +65,18 @@ prediction_false = []
 for batch_idx, (inputs, labels) in tqdm(enumerate(teloader)):
     inputs, labels = inputs.to(device, non_blocking=True), labels.to(device, non_blocking=True)
     text_inputs = torch.cat([clip.tokenize(f"a photo of a {c}") for c in teset.classes]).to(device)
+    try:
+        model.reset()
+        logger.info("resetting model")
+    except:
+        logger.warning("not resetting model")
+
+    _ = model(inputs, text_inputs, teset, device)  # infer and adapt
 
     # Calculate features
     with torch.no_grad():
-        image_features = model.encode_image(inputs)
-        text_features = model.encode_text(text_inputs)
+        image_features = model.model.encode_image(inputs)
+        text_features = model.model.encode_text(text_inputs)
 
     # Pick the top 5 most similar labels for the image
     image_features /= image_features.norm(dim=-1, keepdim=True)

@@ -2,7 +2,10 @@ from copy import deepcopy
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.jit
+
+import clip
 
 
 class Tent(nn.Module):
@@ -22,14 +25,14 @@ class Tent(nn.Module):
         self.model_state, self.optimizer_state = \
             copy_model_and_optimizer(self.model, self.optimizer)
 
-    def forward(self, x, TTT = False):
+    def forward(self, x, text_x, teset, device):
         if self.episodic:
             self.reset()
 
         for _ in range(self.steps):
-            outputs = forward_and_adapt(x, self.model, self.optimizer, TTT = TTT)
+            forward_and_adapt(x, text_x, teset, device, self.model, self.optimizer)
 
-        return outputs
+        return 0
 
     def reset(self):
         if self.model_state is None or self.optimizer_state is None:
@@ -44,23 +47,52 @@ def softmax_entropy(x: torch.Tensor) -> torch.Tensor:
     return -(x.softmax(1) * x.log_softmax(1)).sum(1)
 
 
+def cross_entropy(preds, targets, reduction='none'):
+    log_softmax = nn.LogSoftmax(dim=-1)
+    loss = (-targets * log_softmax(preds)).sum(1)
+    if reduction == "none":
+        return loss
+    elif reduction == "mean":
+        return loss.mean()
+
+
 @torch.enable_grad()  # ensure grads in possible no grad context for testing
-def forward_and_adapt(x, model, optimizer, TTT = False):
+def forward_and_adapt(x, text_x, teset, device, model, optimizer, threshold = 0.5, threshold_not = 0.3):
     """Forward and adapt model on batch of data.
     Measure entropy of the model prediction, take gradients, and update params.
     """
-    if TTT:
-        # forward
-        outputs, loss = model(x, train = False)
-    else:
-        # forward
-        outputs = model(x)
-        # adapt
-        loss = softmax_entropy(outputs).mean(0)
+    # forward
+    with torch.no_grad():
+        image_features = model.encode_image(x)
+        text_features = model.encode_text(text_x)
+    # adapt
+    image_features /= image_features.norm(dim=-1, keepdim=True)
+    text_features /= text_features.norm(dim=-1, keepdim=True)
+
+    similarity = (100.0 * image_features @ text_features.T).softmax(dim=-1)
+    values, pred = similarity.topk(3, 1, True, True)
+    confidence = values[:,0] > threshold
+    not_confidence = values[:,0] < threshold_not
+    pred_conf = pred[:,0][confidence].int()
+    pred_inputs = torch.cat([clip.tokenize(f"a photo of a {teset.classes[c]}") for c in pred_conf]).to(device)
+
+    pred_notconf = pred[not_confidence]
+    pred_inputs_not = torch.cat([clip.tokenize(f"a photo of a {teset.classes[c[0]]} or {teset.classes[c[1]]} or {teset.classes[c[2]]}") for c in pred_notconf]).to(device)
+
+    x_new = torch.cat([x[confidence],x[not_confidence]],0)
+    pred_new = torch.cat([pred_inputs,pred_inputs_not],0)
+    # Calculating the Loss
+    # cosine similarity as logits
+    logits, image_features, text_features=model(x_new, pred_new)
+    images_similarity = image_features @ image_features.t()
+    texts_similarity = text_features @ text_features.t()
+    targets = F.softmax(
+        (images_similarity + texts_similarity) / 2 , dim=-1
+    )
+    loss = cross_entropy(logits.t(), targets.t(), reduction='mean')
     loss.backward()
     optimizer.step()
     optimizer.zero_grad()
-    return outputs
 
 
 def collect_params(model):
@@ -72,7 +104,7 @@ def collect_params(model):
     params = []
     names = []
     for nm, m in model.named_modules():
-        if isinstance(m, nn.BatchNorm2d):
+        if isinstance(m, nn.LayerNorm):
             for np, p in m.named_parameters():
                 if np in ['weight', 'bias']:  # weight is scale, bias is shift
                     params.append(p)
@@ -95,18 +127,12 @@ def load_model_and_optimizer(model, optimizer, model_state, optimizer_state):
 
 def configure_model(model):
     """Configure model for use with tent."""
-    # train mode, because tent optimizes the model to minimize entropy
-    model.train()
     # disable grad, to (re-)enable only what tent updates
     model.requires_grad_(False)
     # configure norm for tent updates: enable grad + force batch statisics
     for m in model.modules():
-        if isinstance(m, nn.BatchNorm2d):
+        if isinstance(m, nn.LayerNorm):
             m.requires_grad_(True)
-            # force use of batch stats in train and eval modes
-            m.track_running_stats = False
-            m.running_mean = None
-            m.running_var = None
     return model
 
 

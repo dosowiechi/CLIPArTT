@@ -23,7 +23,7 @@ def setup_tent(model):
     model.visual = tent.configure_model(model.visual)
     #extractor = [model.net.conv1, model.net.bn1, nn.ReLU(inplace=True), model.net.layer1, model.net.layer2]
     #extractor = nn.Sequential(*extractor)
-    params, param_names = tent.collect_params(model)
+    params, param_names = tent.collect_params(model.visual)
     optimizer = setup_optimizer(params)
     tent_model = tent.Tent(model, optimizer,
                            steps=10, ### Iterations
@@ -57,7 +57,7 @@ model = setup_tent(base_model)
 
 Confidence_th = [1.0, 0.8, 0.6, 0.4]
 Batch_size = [128, 64, 32, 4, 2, 1]
-fichier = open(str(args.K)+'_K.txt', 'w')
+fichier = open(args.dataset + '_' + str(args.K)+'_K.txt', 'w')
 for bs in Batch_size:
     Ecrit = ''
     args.batch_size = bs

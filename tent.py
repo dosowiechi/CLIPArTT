@@ -131,7 +131,7 @@ def collect_params(model):
             for np, p in m.named_parameters():
                 if np in ['weight', 'bias']:  # weight is scale, bias is shift
                     params.append(p)
-                    names.append(f"{nm}.{np}")
+                    names.append(f"visual.{nm}.{np}")
     return params, names
 
 

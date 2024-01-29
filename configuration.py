@@ -32,7 +32,8 @@ def argparser():
     parser.add_argument('--weight-decay',  type=float, default=1e-4, help='Weight decay for optimizer')
     parser.add_argument('--evaluate', action='store_true', help='Evaluating on evaluation set')
     parser.add_argument('--resume', default='', type=str, help='Path to latest checkpoint')
-    parser.add_argument('--lbd', type=float, default=1.0, help='Lambda')
+    parser.add_argument('--threshold-not', type=float, default=1.0, help='Threshold on the not confident')
+    parser.add_argument('--K', type=int, default=3, help='Number of labels keep')
 
     #Test-Time Adaptation
     parser.add_argument('--adapt', action='store_true', help='To adapt or not')

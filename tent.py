@@ -25,12 +25,12 @@ class Tent(nn.Module):
         self.model_state, self.optimizer_state = \
             copy_model_and_optimizer(self.model, self.optimizer)
 
-    def forward(self, x, text_x, teset, device):
+    def forward(self, x, text_x, teset, device, threshold = 1, threshold_not = 1, K=3):
         if self.episodic:
             self.reset()
 
         for _ in range(self.steps):
-            forward_and_adapt(x, text_x, teset, device, self.model, self.optimizer)
+            forward_and_adapt(x, text_x, teset, device, self.model, self.optimizer, threshold = threshold, threshold_not = threshold_not, K=K)
 
         return 0
 
@@ -56,8 +56,17 @@ def cross_entropy(preds, targets, reduction='none'):
         return loss.mean()
 
 
+def getprompt(K, c, teset):
+    for k in range(K):
+        if k == 0:
+            text_prompt = f"a photo of a " + teset.classes[c[k]]
+        else:
+            text_prompt = text_prompt + " or " + teset.classes[c[k]]
+    return text_prompt
+
+
 @torch.enable_grad()  # ensure grads in possible no grad context for testing
-def forward_and_adapt(x, text_x, teset, device, model, optimizer, threshold = 0.5, threshold_not = 0.3):
+def forward_and_adapt(x, text_x, teset, device, model, optimizer, threshold = 1, threshold_not = 1, K=3):
     """Forward and adapt model on batch of data.
     Measure entropy of the model prediction, take gradients, and update params.
     """
@@ -70,17 +79,31 @@ def forward_and_adapt(x, text_x, teset, device, model, optimizer, threshold = 0.
     text_features /= text_features.norm(dim=-1, keepdim=True)
 
     similarity = (100.0 * image_features @ text_features.T).softmax(dim=-1)
-    values, pred = similarity.topk(3, 1, True, True)
+    values, pred = similarity.topk(K, 1, True, True)
     confidence = values[:,0] > threshold
     not_confidence = values[:,0] < threshold_not
     pred_conf = pred[:,0][confidence].int()
-    pred_inputs = torch.cat([clip.tokenize(f"a photo of a {teset.classes[c]}") for c in pred_conf]).to(device)
+    if len(pred_conf) != 0:
+        pred_inputs = torch.cat([clip.tokenize(f"a photo of a {teset.classes[c]}") for c in pred_conf]).to(device)
 
     pred_notconf = pred[not_confidence]
-    pred_inputs_not = torch.cat([clip.tokenize(f"a photo of a {teset.classes[c[0]]} or {teset.classes[c[1]]} or {teset.classes[c[2]]}") for c in pred_notconf]).to(device)
+    if len(pred_notconf) != 0:
+        pred_inputs_not = torch.cat(
+            [clip.tokenize(getprompt(K, c, teset)) for
+             c in pred_notconf]).to(device)
 
-    x_new = torch.cat([x[confidence],x[not_confidence]],0)
-    pred_new = torch.cat([pred_inputs,pred_inputs_not],0)
+    if len(pred_conf) == 0 and len(pred_notconf) == 0:
+        return 0
+    elif len(pred_conf) == 0:
+        x_new = x[not_confidence]
+        pred_new = pred_inputs_not
+    elif len(pred_notconf) == 0:
+        x_new = x[confidence]
+        pred_new = pred_inputs
+        return 0
+    else:
+        x_new = torch.cat([x[confidence],x[not_confidence]],0)
+        pred_new = torch.cat([pred_inputs,pred_inputs_not],0)
     # Calculating the Loss
     # cosine similarity as logits
     logits, image_features, text_features=model(x_new, pred_new)
@@ -89,7 +112,7 @@ def forward_and_adapt(x, text_x, teset, device, model, optimizer, threshold = 0.
     targets = F.softmax(
         (images_similarity + texts_similarity) / 2 , dim=-1
     )
-    loss = cross_entropy(logits.t(), targets.t(), reduction='mean')
+    loss = -cross_entropy(logits.t(), targets.t(), reduction='mean')
     loss.backward()
     optimizer.step()
     optimizer.zero_grad()

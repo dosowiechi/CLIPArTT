@@ -14,7 +14,7 @@ import configuration, tent
 from utils import prepare_dataset, utils
 
 
-def setup_tent(model, name_model):
+def setup_tent(model, name_model, niter = 10):
     """Set up tent adaptation.
     Configure the model for training + feature modulation by batch statistics,
     collect the parameters for feature modulation by gradient optimization,
@@ -30,7 +30,7 @@ def setup_tent(model, name_model):
         params = model.visual.parameters()
     optimizer = setup_optimizer(params)
     tent_model = tent.Tent(model, optimizer,
-                           steps=10, ### Iterations
+                           steps=niter, ### Iterations
                            episodic=True)
     return tent_model
 
@@ -57,19 +57,20 @@ logger = logging.getLogger(__name__)
 # Load the model
 device = "cuda" if torch.cuda.is_available() else "cpu"
 base_model, preprocess = clip.load(args.model, device)
-model = setup_tent(base_model, args.model)
+model = setup_tent(base_model, args.model, niter=args.niter)
 
 Confidence_th = [1.0] #, 0.8, 0.6, 0.4]
 if 'RN' in args.model:
-    Batch_size = [64, 32, 4, 2, 0]
+    Batch_size = [64, 32, 4, 2, 1]
 else:
-    Batch_size = [128, 64, 32, 4, 2, 0]
-fichier = open('Results/' + args.dataset + '_' + args.model + '_' + str(args.K)+'_K.txt', 'w')
+    Batch_size = [128, 64, 32, 4, 2, 1]
+fichier = open('Results/' + args.dataset + '_' + args.model.replace('/','') + '_niter' + str(args.niter) + '_K' + str(args.K)+'.txt', 'w')
 for bs in Batch_size:
     Ecrit = ''
-    if bs == 0:
-        args.adapt = False
     args.batch_size = bs
+    if bs == 1:
+        args.adapt = False
+        args.batch_size = 128
     # Download the dataset
     teloader, _, teset = prepare_dataset.prepare_test_data(args)
     for th in Confidence_th:

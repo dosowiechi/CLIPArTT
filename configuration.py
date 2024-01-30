@@ -40,7 +40,7 @@ def argparser():
     parser.add_argument('--level', default=5, type=int)
     parser.add_argument('--corruption', default='gaussian_noise')
     parser.add_argument('--adapt-lr', default=0.00001, type=float)
-    parser.add_argument('--niter', default=50, type=int)
+    parser.add_argument('--niter', default=10, type=int)
     parser.add_argument('--use-mean', action='store_true', help='Use mean to stop iterate')
 
     #Distributed

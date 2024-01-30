@@ -60,10 +60,15 @@ base_model, preprocess = clip.load(args.model, device)
 model = setup_tent(base_model, args.model)
 
 Confidence_th = [1.0] #, 0.8, 0.6, 0.4]
-Batch_size = [128, 64, 32, 4, 2, 1]
-fichier = open(args.dataset + '_' + str(args.K)+'_K.txt', 'w')
+if 'RN' in args.model:
+    Batch_size = [64, 32, 4, 2, 0]
+else:
+    Batch_size = [128, 64, 32, 4, 2, 0]
+fichier = open('Results/' + args.dataset + '_' + args.model + '_' + str(args.K)+'_K.txt', 'w')
 for bs in Batch_size:
     Ecrit = ''
+    if bs == 0:
+        args.adapt = False
     args.batch_size = bs
     # Download the dataset
     teloader, _, teset = prepare_dataset.prepare_test_data(args)
@@ -76,13 +81,14 @@ for bs in Batch_size:
         for batch_idx, (inputs, labels) in tqdm(enumerate(teloader)):
             inputs, labels = inputs.to(device, non_blocking=True), labels.to(device, non_blocking=True)
             text_inputs = torch.cat([clip.tokenize(f"a photo of a {c}") for c in teset.classes]).to(device)
-            try:
-                model.reset()
-                logger.info("resetting model")
-            except:
-                logger.warning("not resetting model")
+            if args.adapt:
+                try:
+                    model.reset()
+                    logger.info("resetting model")
+                except:
+                    logger.warning("not resetting model")
 
-            _ = model(inputs, text_inputs, teset, device, threshold_not = args.threshold_not, K = args.K)  # infer and adapt
+                _ = model(inputs, text_inputs, teset, device, threshold_not = args.threshold_not, K = args.K)  # infer and adapt
 
             # Calculate features
             with torch.no_grad():

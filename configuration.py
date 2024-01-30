@@ -15,7 +15,7 @@ def argparser():
     parser.add_argument('--clip', type=bool, default=True)
 
     #Model
-    parser.add_argument('--model', type=str, default='resnet50')
+    parser.add_argument('--model', type=str, default='ViT-B/32')
     parser.add_argument('--load', type=str)
 
     #Dataset

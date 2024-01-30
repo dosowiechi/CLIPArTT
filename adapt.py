@@ -14,16 +14,20 @@ import configuration, tent
 from utils import prepare_dataset, utils
 
 
-def setup_tent(model):
+def setup_tent(model, name_model):
     """Set up tent adaptation.
     Configure the model for training + feature modulation by batch statistics,
     collect the parameters for feature modulation by gradient optimization,
     set up the optimizer, and then tent the model.
     """
-    model.visual = tent.configure_model(model.visual)
-    #extractor = [model.net.conv1, model.net.bn1, nn.ReLU(inplace=True), model.net.layer1, model.net.layer2]
-    #extractor = nn.Sequential(*extractor)
-    params, param_names = tent.collect_params(model.visual)
+    LN = True
+    if LN == True:
+        model.visual = tent.configure_model(model.visual, name_model)
+        #extractor = [model.net.conv1, model.net.bn1, nn.ReLU(inplace=True), model.net.layer1, model.net.layer2]
+        #extractor = nn.Sequential(*extractor)
+        params, param_names = tent.collect_params(model.visual, name_model)
+    else:
+        params = model.visual.parameters()
     optimizer = setup_optimizer(params)
     tent_model = tent.Tent(model, optimizer,
                            steps=10, ### Iterations
@@ -52,10 +56,10 @@ logger = logging.getLogger(__name__)
 
 # Load the model
 device = "cuda" if torch.cuda.is_available() else "cpu"
-base_model, preprocess = clip.load('ViT-B/32', device)
-model = setup_tent(base_model)
+base_model, preprocess = clip.load(args.model, device)
+model = setup_tent(base_model, args.model)
 
-Confidence_th = [1.0, 0.8, 0.6, 0.4]
+Confidence_th = [1.0] #, 0.8, 0.6, 0.4]
 Batch_size = [128, 64, 32, 4, 2, 1]
 fichier = open(args.dataset + '_' + str(args.K)+'_K.txt', 'w')
 for bs in Batch_size:

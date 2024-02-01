@@ -72,7 +72,7 @@ fichier = open('Results/' + args.dataset + '_' + args.model.replace('/','') + '.
 for cor in common_corruptions:
     # Ecrit = ''
     args.corruption = cor
-    validation = 1
+    validation = 3
     # Download the dataset
     teloader, _, teset = prepare_dataset.prepare_test_data(args)
     acc = []

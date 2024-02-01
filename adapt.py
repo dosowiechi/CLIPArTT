@@ -59,35 +59,38 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 base_model, preprocess = clip.load(args.model, device)
 model = setup_tent(base_model, args.model, niter=args.niter)
 
-Confidence_th = [1.0] #, 0.8, 0.6, 0.4]
-if 'RN' in args.model:
-    Batch_size = [64, 32, 4, 2, 1]
-else:
-    Batch_size = [128, 64, 32, 4, 2, 1]
-fichier = open('Results/' + args.dataset + '_' + args.model.replace('/','') + '_niter' + str(args.niter) + '_K' + str(args.K)+'.txt', 'w')
-for bs in Batch_size:
-    Ecrit = ''
-    args.batch_size = bs
-    if bs == 1:
-        args.adapt = False
-        args.batch_size = 128
+# Confidence_th = [1.0] #, 0.8, 0.6, 0.4]
+# if 'RN' in args.model:
+#     Batch_size = [64, 32, 4, 2, 1]
+# else:
+#     Batch_size = [128, 64, 32, 4, 2, 1]
+common_corruptions = ['original', 'gaussian_noise', 'shot_noise', 'impulse_noise', 'defocus_blur', 'glass_blur',
+                      'motion_blur', 'zoom_blur', 'snow', 'frost', 'fog',
+                      'brightness', 'contrast', 'elastic_transform', 'pixelate', 'jpeg_compression']
+# fichier = open('Results/' + args.dataset + '_' + args.model.replace('/','') + '_niter' + str(args.niter) + '_K' + str(args.K)+'.txt', 'w')
+fichier = open('Results/' + args.dataset + '_' + args.model.replace('/','') + '.txt', 'w')
+for cor in common_corruptions:
+    # Ecrit = ''
+    args.corruption = cor
+    validation = 1
     # Download the dataset
     teloader, _, teset = prepare_dataset.prepare_test_data(args)
-    for th in Confidence_th:
-        args.threshold_not = th
+    acc = []
+    for _ in range(validation):
         correct = 0
-        acc3 = 0
-        prediction_true = []
-        prediction_false = []
+        # acc3 = 0
+        # prediction_true = []
+        # prediction_false = []
         for batch_idx, (inputs, labels) in tqdm(enumerate(teloader)):
             inputs, labels = inputs.to(device, non_blocking=True), labels.to(device, non_blocking=True)
             text_inputs = torch.cat([clip.tokenize(f"a photo of a {c}") for c in teset.classes]).to(device)
+
+            try:
+                model.reset()
+                logger.info("resetting model")
+            except:
+                logger.warning("not resetting model")
             if args.adapt:
-                try:
-                    model.reset()
-                    logger.info("resetting model")
-                except:
-                    logger.warning("not resetting model")
 
                 _ = model(inputs, text_inputs, teset, device, threshold_not = args.threshold_not, K = args.K)  # infer and adapt
 
@@ -105,25 +108,27 @@ for bs in Batch_size:
             pred = pred.t()
             correctness = pred.eq(labels.view(1, -1).expand_as(pred))
 
-            values3, pred3 = similarity.topk(3, 1, True, True)
-            for k in range(len(labels)):
-                if labels[k] in pred3:
-                    acc3 += 1
-            for k in range(len(correctness)):
-                if correctness[0, k] == True:
-                    prediction_true.append(100 * values[k].item())
-                elif correctness[0, k] == False:
-                    prediction_false.append(100 * values[k].item())
+            # values3, pred3 = similarity.topk(3, 1, True, True)
+            # for k in range(len(labels)):
+            #     if labels[k] in pred3:
+            #         acc3 += 1
+            # for k in range(len(correctness)):
+            #     if correctness[0, k] == True:
+            #         prediction_true.append(100 * values[k].item())
+            #     elif correctness[0, k] == False:
+            #         prediction_false.append(100 * values[k].item())
             correct += correctness.sum().item()
             #acc = utils.accuracy(similarity, labels)
 
-        accuracy = correct / len(teloader.dataset)
-        acc3 = acc3/ len(teloader.dataset)
-        prediction_true = np.array(prediction_true)
-        prediction_false = np.array(prediction_false)
+        acc.append(correct / len(teloader.dataset))
+        # acc3 = acc3/ len(teloader.dataset)
+        # prediction_true = np.array(prediction_true)
+        # prediction_false = np.array(prediction_false)
         # Print the result
-        print('Corruption:', args.corruption)
-        print("Accuracy:", accuracy)
-        print("Accuracy3:", acc3)
-        Ecrit = Ecrit + str(round(accuracy*100,2)) + ','
-    fichier.write(Ecrit + '\n')
+        # print('Corruption:', args.corruption)
+        # print("Accuracy:", accuracy)
+        # print("Accuracy3:", acc3)
+        # Ecrit = Ecrit + str(round(accuracy*100,2)) + ','
+    # fichier.write(Ecrit + '\n')
+    print(str(round(np.array(acc).mean()*100,2)) + ',' + str(round(np.array(acc).std()*100,2)))
+    fichier.write(str(round(np.array(acc).mean()*100,2)) + ',' + str(round(np.array(acc).std()*100,2)) + '\n')

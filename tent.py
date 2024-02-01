@@ -30,6 +30,8 @@ class Tent(nn.Module):
             self.reset()
 
         for _ in range(self.steps):
+            #forward_and_adapt(x, text_x, teset, device, self.model, self.optimizer, threshold=0,
+            #                  threshold_not=1, K=K)
             forward_and_adapt(x, text_x, teset, device, self.model, self.optimizer, threshold = threshold, threshold_not = threshold_not, K=K)
 
         return 0
@@ -100,7 +102,7 @@ def forward_and_adapt(x, text_x, teset, device, model, optimizer, threshold = 1,
     elif len(pred_notconf) == 0:
         x_new = x[confidence]
         pred_new = pred_inputs
-        return 0
+        # return 0
     else:
         x_new = torch.cat([x[confidence],x[not_confidence]],0)
         pred_new = torch.cat([pred_inputs,pred_inputs_not],0)
@@ -112,7 +114,10 @@ def forward_and_adapt(x, text_x, teset, device, model, optimizer, threshold = 1,
     targets = F.softmax(
         (images_similarity + texts_similarity) / 2 , dim=-1
     )
-    loss = -cross_entropy(logits.t(), targets.t(), reduction='mean')
+    if len(pred_conf) == 0:
+        loss = -cross_entropy(logits.t(), targets.t(), reduction='mean')
+    else:
+        loss = -cross_entropy(logits.t(), targets.t(), reduction='mean')
     loss.backward()
     optimizer.step()
     optimizer.zero_grad()

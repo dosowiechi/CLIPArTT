@@ -14,7 +14,7 @@ import configuration, tent
 from utils import prepare_dataset, utils
 
 
-def setup_tent(model, name_model, niter = 10):
+def setup_tent(model, name_model, niter = 10, method = 'clip'):
     """Set up tent adaptation.
     Configure the model for training + feature modulation by batch statistics,
     collect the parameters for feature modulation by gradient optimization,
@@ -31,6 +31,7 @@ def setup_tent(model, name_model, niter = 10):
     optimizer = setup_optimizer(params)
     tent_model = tent.Tent(model, optimizer,
                            steps=niter, ### Iterations
+                           method=method,
                            episodic=True)
     return tent_model
 
@@ -57,16 +58,17 @@ logger = logging.getLogger(__name__)
 # Load the model
 device = "cuda" if torch.cuda.is_available() else "cpu"
 base_model, preprocess = clip.load(args.model, device)
-model = setup_tent(base_model, args.model, niter=args.niter)
+model = setup_tent(base_model, args.model, niter=args.niter, method = args.method)
 
 # Confidence_th = [1.0] #, 0.8, 0.6, 0.4]
 # if 'RN' in args.model:
 #     Batch_size = [64, 32, 4, 2, 1]
 # else:
 #     Batch_size = [128, 64, 32, 4, 2, 1]
-common_corruptions = ['original', 'gaussian_noise', 'shot_noise', 'impulse_noise', 'defocus_blur', 'glass_blur',
-                      'motion_blur', 'zoom_blur', 'snow', 'frost', 'fog',
-                      'brightness', 'contrast', 'elastic_transform', 'pixelate', 'jpeg_compression']
+common_corruptions = [args.corruption]
+# common_corruptions = ['cifar_new'] #'original', 'gaussian_noise', 'shot_noise', 'impulse_noise', 'defocus_blur', 'glass_blur',
+                      #'motion_blur', 'zoom_blur', 'snow', 'frost', 'fog',
+                      #'brightness', 'contrast', 'elastic_transform', 'pixelate', 'jpeg_compression']
 # fichier = open('Results/' + args.dataset + '_' + args.model.replace('/','') + '_niter' + str(args.niter) + '_K' + str(args.K)+'.txt', 'w')
 fichier = open('Results/' + args.dataset + '_' + args.model.replace('/','') + '.txt', 'w')
 for cor in common_corruptions:
@@ -75,6 +77,9 @@ for cor in common_corruptions:
     validation = 3
     # Download the dataset
     teloader, _, teset = prepare_dataset.prepare_test_data(args)
+    if cor == 'cifar_new':
+        args.corruption = 'original'
+        _, _, teset = prepare_dataset.prepare_test_data(args)
     acc = []
     for _ in range(validation):
         correct = 0

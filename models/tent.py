@@ -6,13 +6,14 @@ import torch.nn.functional as F
 import torch.jit
 
 import clip
+from models import lame
 
 
 class Tent(nn.Module):
     """Tent adapts a model by entropy minimization during testing.
     Once tented, a model adapts itself by updating on every forward.
     """
-    def __init__(self, model, optimizer, steps=1, method='clip', episodic=False):
+    def __init__(self, model, optimizer, steps=1, method='clipartt', episodic=False):
         super().__init__()
         self.model = model
         self.optimizer = optimizer
@@ -26,16 +27,32 @@ class Tent(nn.Module):
         self.model_state, self.optimizer_state = \
             copy_model_and_optimizer(self.model, self.optimizer)
 
-    def forward(self, x, text_x, teset, device, threshold = 1, threshold_not = 1, K=3):
+    def forward(self, x, text_x, teset, device, threshold = 1, threshold_not = 1, K=3, affinity='knn', force_simmetry=True):
         if self.episodic:
             self.reset()
 
         for _ in range(self.steps):
             #forward_and_adapt(x, text_x, teset, device, self.model, self.optimizer, threshold=0,
             #                  threshold_not=1, K=K)
-            forward_and_adapt(x, text_x, teset, device, self.model, self.optimizer, method = self.method, threshold = threshold, threshold_not = threshold_not, K=K)
+            if self.method in ['clipartt', 'tent']:
+                forward_and_adapt(x, text_x, teset, device, self.model, self.optimizer, method = self.method, threshold = threshold, threshold_not = threshold_not, K=K)
+                Y = 0
+            elif self.method == 'lame':
+                logits, image_features, _ = self.model(x, text_x)
+                probas = torch.softmax(logits.t(), dim=1)
+                unary = -torch.log(probas + 1e-10)
+                features = F.normalize(image_features, p=2, dim=-1)
+                if affinity == 'knn':
+                    kernel = lame.kNN_affinity(knn=5)(features)
+                elif affinity == 'rbf':
+                    kernel = lame.rbf_affinity(knn=5)(features)
+                else:
+                    kernel = lame.linear_affinity()(features)
+                if force_simmetry:
+                    kernel = 1 / 2 * (kernel + kernel.t())
+                Y = lame.laplacian_optimization(unary.type(torch.float32), kernel.type(torch.float32))
 
-        return 0
+        return Y
 
     def reset(self):
         if self.model_state is None or self.optimizer_state is None:
@@ -69,11 +86,11 @@ def getprompt(K, c, teset):
 
 
 @torch.enable_grad()  # ensure grads in possible no grad context for testing
-def forward_and_adapt(x, text_x, teset, device, model, optimizer, method = 'clip', threshold = 1, threshold_not = 1, K=3):
+def forward_and_adapt(x, text_x, teset, device, model, optimizer, method = 'clipartt', threshold = 1, threshold_not = 1, K=3):
     """Forward and adapt model on batch of data.
     Measure entropy of the model prediction, take gradients, and update params.
     """
-    if method == 'clip':
+    if method == 'clipartt':
         # forward
         with torch.no_grad():
             image_features = model.encode_image(x)

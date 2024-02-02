@@ -1,17 +1,14 @@
-import os
-
 import numpy as np
 
 import clip
 import torch
 import torch.optim as optim
-import torch.nn as nn
 from tqdm import tqdm
-from torchvision.datasets import CIFAR100
 import logging
 
-import configuration, tent
-from utils import prepare_dataset, utils
+import configuration
+from models import tent, lame
+from utils import prepare_dataset
 
 
 def setup_tent(model, name_model, niter = 10, method = 'clip'):
@@ -30,7 +27,7 @@ def setup_tent(model, name_model, niter = 10, method = 'clip'):
         params = model.visual.parameters()
     optimizer = setup_optimizer(params)
     tent_model = tent.Tent(model, optimizer,
-                           steps=niter, ### Iterations
+                           steps=niter,  ### Iterations
                            method=method,
                            episodic=True)
     return tent_model
@@ -60,11 +57,6 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 base_model, preprocess = clip.load(args.model, device)
 model = setup_tent(base_model, args.model, niter=args.niter, method = args.method)
 
-# Confidence_th = [1.0] #, 0.8, 0.6, 0.4]
-# if 'RN' in args.model:
-#     Batch_size = [64, 32, 4, 2, 1]
-# else:
-#     Batch_size = [128, 64, 32, 4, 2, 1]
 common_corruptions = [args.corruption]
 # common_corruptions = ['cifar_new'] #'original', 'gaussian_noise', 'shot_noise', 'impulse_noise', 'defocus_blur', 'glass_blur',
                       #'motion_blur', 'zoom_blur', 'snow', 'frost', 'fog',
@@ -83,9 +75,6 @@ for cor in common_corruptions:
     acc = []
     for _ in range(validation):
         correct = 0
-        # acc3 = 0
-        # prediction_true = []
-        # prediction_false = []
         for batch_idx, (inputs, labels) in tqdm(enumerate(teloader)):
             inputs, labels = inputs.to(device, non_blocking=True), labels.to(device, non_blocking=True)
             text_inputs = torch.cat([clip.tokenize(f"a photo of a {c}") for c in teset.classes]).to(device)
@@ -97,43 +86,27 @@ for cor in common_corruptions:
                 logger.warning("not resetting model")
             if args.adapt:
 
-                _ = model(inputs, text_inputs, teset, device, threshold_not = args.threshold_not, K = args.K)  # infer and adapt
+                Y = model(inputs, text_inputs, teset, device, threshold_not = args.threshold_not, K = args.K)  # infer and adapt
 
-            # Calculate features
-            with torch.no_grad():
-                image_features = model.model.encode_image(inputs)
-                text_features = model.model.encode_text(text_inputs)
+            if args.method in ['clipartt', 'tent'] or not args.adapt:
+                # Calculate features
+                with torch.no_grad():
+                    image_features = model.model.encode_image(inputs)
+                    text_features = model.model.encode_text(text_inputs)
 
-            # Pick the top 5 most similar labels for the image
-            image_features /= image_features.norm(dim=-1, keepdim=True)
-            text_features /= text_features.norm(dim=-1, keepdim=True)
-            similarity = (100.0 * image_features @ text_features.T).softmax(dim=-1)
-            #values, indices = similarity.topk(5)
-            values, pred = similarity.topk(1, 1, True, True)
+                # Pick the top 5 most similar labels for the image
+                image_features /= image_features.norm(dim=-1, keepdim=True)
+                text_features /= text_features.norm(dim=-1, keepdim=True)
+                similarity = (100.0 * image_features @ text_features.T).softmax(dim=-1)
+                #values, indices = similarity.topk(5)
+                values, pred = similarity.topk(1, 1, True, True)
+            elif args.method == 'lame':
+                pred = Y.argmax(1)
+                pred = pred.unsqueeze(1)
             pred = pred.t()
             correctness = pred.eq(labels.view(1, -1).expand_as(pred))
-
-            # values3, pred3 = similarity.topk(3, 1, True, True)
-            # for k in range(len(labels)):
-            #     if labels[k] in pred3:
-            #         acc3 += 1
-            # for k in range(len(correctness)):
-            #     if correctness[0, k] == True:
-            #         prediction_true.append(100 * values[k].item())
-            #     elif correctness[0, k] == False:
-            #         prediction_false.append(100 * values[k].item())
             correct += correctness.sum().item()
-            #acc = utils.accuracy(similarity, labels)
 
         acc.append(correct / len(teloader.dataset))
-        # acc3 = acc3/ len(teloader.dataset)
-        # prediction_true = np.array(prediction_true)
-        # prediction_false = np.array(prediction_false)
-        # Print the result
-        # print('Corruption:', args.corruption)
-        # print("Accuracy:", accuracy)
-        # print("Accuracy3:", acc3)
-        # Ecrit = Ecrit + str(round(accuracy*100,2)) + ','
-    # fichier.write(Ecrit + '\n')
     print(str(round(np.array(acc).mean()*100,2)) + ',' + str(round(np.array(acc).std()*100,2)))
     fichier.write(str(round(np.array(acc).mean()*100,2)) + ',' + str(round(np.array(acc).std()*100,2)) + '\n')

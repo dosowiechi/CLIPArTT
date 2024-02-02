@@ -34,7 +34,7 @@ def argparser():
     parser.add_argument('--resume', default='', type=str, help='Path to latest checkpoint')
     parser.add_argument('--threshold-not', type=float, default=1.0, help='Threshold on the not confident')
     parser.add_argument('--K', type=int, default=3, help='Number of labels keep')
-    parser.add_argument('--method', type=str, default='clip', choices=('clipartt', 'tent', 'lame'))
+    parser.add_argument('--method', type=str, default='clipartt', choices=('clipartt', 'tent', 'lame'))
 
     #Test-Time Adaptation
     parser.add_argument('--adapt', action='store_true', help='To adapt or not')

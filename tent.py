@@ -124,7 +124,7 @@ def forward_and_adapt(x, text_x, teset, device, model, optimizer, method = 'clip
         # forward
         logits, image_features, text_features = model(x, text_x)
         # adapt
-        loss = softmax_entropy(image_features).mean(0)
+        loss = softmax_entropy(logits).mean(0)
     loss.backward()
     optimizer.step()
     optimizer.zero_grad()

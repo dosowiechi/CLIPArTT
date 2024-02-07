@@ -58,9 +58,9 @@ base_model, preprocess = clip.load(args.model, device)
 model = setup_tent(base_model, args.model, niter=args.niter, method = args.method)
 
 common_corruptions = [args.corruption]
-# common_corruptions = ['cifar_new'] #'original', 'gaussian_noise', 'shot_noise', 'impulse_noise', 'defocus_blur', 'glass_blur',
-                      #'motion_blur', 'zoom_blur', 'snow', 'frost', 'fog',
-                      #'brightness', 'contrast', 'elastic_transform', 'pixelate', 'jpeg_compression']
+# common_corruptions = ['original', 'gaussian_noise', 'shot_noise', 'impulse_noise', 'defocus_blur', 'glass_blur',
+#                       'motion_blur', 'zoom_blur', 'snow', 'frost', 'fog',
+#                       'brightness', 'contrast', 'elastic_transform', 'pixelate', 'jpeg_compression'] #'cifar_new',
 # fichier = open('Results/' + args.dataset + '_' + args.model.replace('/','') + '_niter' + str(args.niter) + '_K' + str(args.K)+'.txt', 'w')
 fichier = open('Results/' + args.dataset + '_' + args.model.replace('/','') + '.txt', 'w')
 for cor in common_corruptions:
@@ -86,7 +86,7 @@ for cor in common_corruptions:
                 logger.warning("not resetting model")
             if args.adapt:
 
-                Y = model(inputs, text_inputs, teset, device, threshold_not = args.threshold_not, K = args.K)  # infer and adapt
+                Y = model(inputs, text_inputs, teset, device, threshold_not = args.threshold_not, K = args.K, target_method = args.target_method)  # infer and adapt
 
             if args.method in ['clipartt', 'tent'] or not args.adapt:
                 # Calculate features

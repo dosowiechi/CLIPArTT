@@ -131,17 +131,14 @@ def forward_and_adapt(x, text_x, teset, device, model, optimizer, method = 'clip
         images_similarity = image_features @ image_features.t()
         texts_similarity = text_features @ text_features.t()
         targets = F.softmax(
-            (images_similarity + texts_similarity) / 2 , dim=-1
+            ((images_similarity + texts_similarity) / 2)/0.01 , dim=-1
         )
-        if len(pred_conf) == 0:
-            loss = -cross_entropy(logits.t(), targets.t(), reduction='mean')
-        else:
-            loss = -cross_entropy(logits.t(), targets.t(), reduction='mean')
+        loss = cross_entropy(logits.t(), targets.t(), reduction='mean')
     elif method == 'tent':
         # forward
         logits, image_features, text_features = model(x, text_x)
         # adapt
-        loss = softmax_entropy(logits).mean(0)
+        loss = softmax_entropy(logits.T).mean(0)
     loss.backward()
     optimizer.step()
     optimizer.zero_grad()

@@ -6,7 +6,7 @@ This work was greatly inspired by the code in [NC-TTT](https://github.com/Gustav
 
 We propose a novel unsupervised TTA technique .
 
-![Diagram](https://github.com/dosowiechi/CLIPArTT/CLIPArTT.png)
+![Diagram](https://github.com/dosowiechi/CLIPArTT/blob/main/CLIPArTT.png)
 
 ## Setup 
 

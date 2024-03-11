@@ -86,7 +86,7 @@ for cor in common_corruptions:
                 logger.warning("not resetting model")
             if args.adapt:
 
-                Y = model(inputs, text_inputs, teset, device, threshold_not = args.threshold_not, K = args.K, target_method = args.target_method)  # infer and adapt
+                Y = model(inputs, text_inputs, teset, device, K = args.K, target_method = args.target_method)  # infer and adapt
 
             if args.method in ['clipartt', 'tent'] or not args.adapt:
                 # Calculate features

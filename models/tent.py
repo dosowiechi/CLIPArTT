@@ -27,13 +27,13 @@ class Tent(nn.Module):
         self.model_state, self.optimizer_state = \
             copy_model_and_optimizer(self.model, self.optimizer)
 
-    def forward(self, x, text_x, teset, device, threshold = 1, threshold_not = 1, K=3, target_method = 1, affinity='knn', force_simmetry=True):
+    def forward(self, x, text_x, teset, device, K=3, target_method = 1, affinity='knn', force_simmetry=True):
         if self.episodic:
             self.reset()
 
         for _ in range(self.steps):
             if self.method in ['clipartt', 'tent']:
-                forward_and_adapt(x, text_x, teset, device, self.model, self.optimizer, method = self.method, threshold = threshold, threshold_not = threshold_not, K=K, target_method = target_method)
+                forward_and_adapt(x, text_x, teset, device, self.model, self.optimizer, method = self.method, K=K, target_method = target_method)
                 Y = 0
             elif self.method == 'lame':
                 logits, image_features, _ = self.model(x, text_x)
@@ -84,7 +84,7 @@ def getprompt(K, c, teset):
 
 
 @torch.enable_grad()  # ensure grads in possible no grad context for testing
-def forward_and_adapt(x, text_x, teset, device, model, optimizer, method = 'clipartt', threshold = 1, threshold_not = 1, K=3, target_method = 1):
+def forward_and_adapt(x, text_x, teset, device, model, optimizer, method = 'clipartt', K=3, target_method = 1):
     """Forward and adapt model on batch of data.
     Measure entropy of the model prediction, take gradients, and update params.
     """
@@ -99,33 +99,11 @@ def forward_and_adapt(x, text_x, teset, device, model, optimizer, method = 'clip
 
         similarity = (100.0 * image_features @ text_features.T).softmax(dim=-1)
         values, pred = similarity.topk(K, 1, True, True)
-        confidence = values[:,0] > threshold
-        not_confidence = values[:,0] < threshold_not
-        pred_conf = pred[:,0][confidence].int()
-        if len(pred_conf) != 0:
-            pred_inputs = torch.cat([clip.tokenize(f"a photo of a {teset.classes[c]}") for c in pred_conf]).to(device)
+        pred_inputs = torch.cat([clip.tokenize(getprompt(K, c, teset)) for c in pred]).to(device)
 
-        pred_notconf = pred[not_confidence]
-        if len(pred_notconf) != 0:
-            pred_inputs_not = torch.cat(
-                [clip.tokenize(getprompt(K, c, teset)) for
-                 c in pred_notconf]).to(device)
-
-        if len(pred_conf) == 0 and len(pred_notconf) == 0:
-            return 0
-        elif len(pred_conf) == 0:
-            x_new = x[not_confidence]
-            pred_new = pred_inputs_not
-        elif len(pred_notconf) == 0:
-            x_new = x[confidence]
-            pred_new = pred_inputs
-            # return 0
-        else:
-            x_new = torch.cat([x[confidence],x[not_confidence]],0)
-            pred_new = torch.cat([pred_inputs,pred_inputs_not],0)
         # Calculating the Loss
         # cosine similarity as logits
-        logits, image_features, text_features=model(x_new, pred_new)
+        logits, image_features, text_features=model(x, pred_inputs)
         images_similarity = image_features @ image_features.t()
         texts_similarity = text_features @ text_features.t()
         if target_method == 1 :

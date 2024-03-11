@@ -8,3 +8,6 @@ __pycache__/
 thumbs.db
 .DS_Store
 .idea
+
+test_1image.py
+test_dataset.py

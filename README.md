@@ -8,10 +8,6 @@ We propose a novel unsupervised TTA technique .
 
 ![Diagram](https://github.com/dosowiechi/CLIPArTT/blob/main/CLIPArTT.png)
 
-## Setup 
-
-The repository is divided into two directories: one for the datasets under CIFAR-10 and CIFAR-100 and one for the dataset ViSDA-C. Details of how each code works can be found in their respective READMEs.
-
 ## Citation
 
 If you found this repository, or its related paper useful for your research, you can cite this work as:

@@ -68,8 +68,8 @@ for cor in common_corruptions:
     args.corruption = cor
     validation = 3
     # Download the dataset
-    teloader, _, teset = prepare_dataset.prepare_test_data(args)
-    if cor == 'cifar_new':
+    teloader, _, teset = prepare_dataset.prepare_test_data(args, transform=preprocess if args.dataset == 'visda' else None)
+    if cor == 'cifar_new' and args.dataset != 'visda':
         args.corruption = 'original'
         _, _, teset = prepare_dataset.prepare_test_data(args)
     acc = []

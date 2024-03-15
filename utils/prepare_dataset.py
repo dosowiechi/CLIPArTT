@@ -1,12 +1,15 @@
 import torch
 import torch.utils.data
+from torch.utils.data import random_split
 import torchvision
 import torchvision.transforms as transforms
+from torchvision.datasets import ImageFolder
 import numpy as np
 from PIL import Image
 
 from utils.tiny_imagenet import TinyImageNetDataset
 from utils.tiny_imagenet_c import TinyImageNetCDataset
+from utils.visdatest import *
 
 NORM = ((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
 te_transforms = transforms.Compose([transforms.ToTensor(),
@@ -19,6 +22,17 @@ tinyimagenet_transforms = transforms.Compose([transforms.RandomCrop(64, padding=
                                     transforms.RandomHorizontalFlip(),
                                     transforms.ToTensor(),
                                     transforms.Normalize(*NORM)])
+
+visda_train = transforms.Compose([transforms.Resize((256,256)),
+                                  transforms.RandomCrop((224,224)),
+                                  transforms.RandomHorizontalFlip(),
+                                  transforms.ToTensor(),
+                                  transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
+
+visda_val = transforms.Compose([transforms.Resize((256,256)),
+                                transforms.CenterCrop((224,224)),
+                                transforms.ToTensor(),
+                                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
 
 try:
     from torchvision.transforms import InterpolationMode
@@ -43,7 +57,7 @@ common_corruptions = ['gaussian_noise', 'shot_noise', 'impulse_noise', 'defocus_
                       'brightness', 'contrast', 'elastic_transform', 'pixelate', 'jpeg_compression']
 
 
-def prepare_test_data(args):
+def prepare_test_data(args, transform=None):
     if args.clip :
         te_transforms = clip_transforms
     if args.dataset == 'cifar10':
@@ -77,6 +91,9 @@ def prepare_test_data(args):
                 train=False, download=False, transform=te_transforms)
 
             teset.data = teset_raw
+    elif args.dataset == 'visda':
+        teset = VisdaTest(args.dataroot, transforms=visda_val)
+
     elif args.dataset == 'tiny-imagenet':
         if not hasattr(args, 'corruption') or args.corruption == 'original':
             teset = TinyImageNetDataset(args.dataroot + '/tiny-imagenet-200/', mode='val', transform=te_transforms)
@@ -103,7 +120,23 @@ def prepare_test_data(args):
     return teloader, te_sampler, teset
 
 
-def prepare_train_data(args):
+def prepare_val_data(args, transform=None):
+    if args.dataset == 'visda':
+        vset = ImageFolder(root=args.dataroot + 'validation/', transform=transform if transform is not None else visda_val)
+    else:
+        raise Exception('Dataset not found!')
+
+    if args.distributed:
+        v_sampler = torch.utils.data.distributed.DistributedSampler(vset)
+    else:
+        v_sampler = None
+    if not hasattr(args, 'workers'):
+        args.workers = 1
+    vloader = torch.utils.data.DataLoader(vset, batch_size=args.batch_size,
+        shuffle=(v_sampler is None), num_workers=args.workers, pin_memory=True, sampler=v_sampler, drop_last=True)
+    return vloader, v_sampler
+
+def prepare_train_data(args, transform=None):
     if args.clip :
         tr_transforms = clip_transforms
     if args.dataset == 'cifar10':
@@ -111,6 +144,9 @@ def prepare_train_data(args):
             train=True, download=False, transform=tr_transforms)
     elif args.dataset == 'cifar100':
         trset = torchvision.datasets.CIFAR100(root=args.dataroot, train=True, download=False, transform=tr_transforms)
+    elif args.dataset == 'visda':
+        dataset = ImageFolder(root=args.dataroot + 'train/', transform=visda_train if transform is None else transform)
+        trset, _ = random_split(dataset, [106678, 45719], generator=torch.Generator().manual_seed(args.seed))
     elif args.dataset == 'tiny-imagenet':
         trset = TinyImageNetDataset(args.dataroot + '/tiny-imagenet-200/', transform=tinyimagenet_transforms)
     else:
@@ -125,4 +161,6 @@ def prepare_train_data(args):
         args.workers = 1
     trloader = torch.utils.data.DataLoader(trset, batch_size=args.batch_size,
         shuffle=(tr_sampler is None), num_workers=args.workers, pin_memory=True, sampler=tr_sampler)
+
+
     return trloader, tr_sampler, trset

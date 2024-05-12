@@ -118,6 +118,8 @@ def forward_and_adapt(x, text_x, teset, device, model, optimizer, method = 'clip
             targets = F.softmax(
                 ((texts_similarity) / 2) / 0.01, dim=-1
             )
+        elif target_method == 4:
+            targets = torch.eye(logits.shape[0]).to(device)
         loss = cross_entropy(logits.t(), targets.t(), reduction='mean')
     elif method == 'tent':
         # forward

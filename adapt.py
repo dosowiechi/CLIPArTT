@@ -5,6 +5,7 @@ import torch
 import torch.optim as optim
 from tqdm import tqdm
 import logging
+import json
 
 import configuration
 from models import tent, lame
@@ -69,6 +70,11 @@ for cor in common_corruptions:
     validation = 3
     # Download the dataset
     teloader, _, teset = prepare_dataset.prepare_test_data(args, transform=preprocess if args.dataset == 'visda' else None)
+    if args.dataset == 'imagenet':
+        classes_idx = json.load(open(os.path.join(args.root, 'imagenet_class_index.json')))
+        classes_dict = {id: name[1] for id, name in zip(classes_idx.keys(), classes_idx.values())}
+        teset.classes = list(classes_dict.values())
+        n_images = 100000
     if cor == 'cifar_new' and args.dataset != 'visda':
         args.corruption = 'original'
         _, _, teset = prepare_dataset.prepare_test_data(args)

@@ -100,6 +100,8 @@ def prepare_test_data(args, transform=None):
         elif args.corruption in common_corruptions:
             teset = TinyImageNetCDataset(args.dataroot + '/Tiny-ImageNet-C/', corruption = args.corruption, level = args.level,
                                         transform=te_transforms)
+    elif args.dataset == 'imagenet':
+      teset = ImageFolder(os.path.join(args.dataroot, args.corruption, str(args.level)), transform=te_transforms)
     else:
         raise Exception('Dataset not found!')
 
